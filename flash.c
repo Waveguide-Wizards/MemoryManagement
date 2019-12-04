@@ -88,8 +88,6 @@ void FLASHInit(){
     */
 }
 
-//void FLASHGetId()
-
 void FLASHSendCommand(uint32_t * data, uint32_t size){
     GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x0);
     volatile uint32_t index = 0;
@@ -117,6 +115,55 @@ void FLASHSendCommand(uint32_t * data, uint32_t size){
     }
 }
 
+void FLASHSendCommandNoCS(uint32_t * data, uint32_t size){
+    volatile uint32_t index = 0;
+    for(index = 0; index < size; index++)
+    {
+        //
+        // Send the data using the "blocking" put function.  This function
+        // will wait until there is room in the send FIFO before returning.
+        // This allows you to assure that all the data you send makes it into
+        // the send FIFO.
+        //
+        SSIDataPut(SSI0_BASE, data[index]);
+        while(SSIBusy(SSI0_BASE))
+        {
+        }
+
+    }
+    //
+    // Wait until SSI0 is done transferring all the data in the transmit FIFO.
+    //
+    while(SSIBusy(SSI0_BASE))
+    {
+    }
+}
+
+void FLASHClockOut(uint32_t size){
+    volatile uint32_t index = 0;
+    volatile uint32_t dummy = 0x00;
+    for(index = 0; index < size; index++)
+    {
+        //
+        // Send the data using the "blocking" put function.  This function
+        // will wait until there is room in the send FIFO before returning.
+        // This allows you to assure that all the data you send makes it into
+        // the send FIFO.
+        //
+        SSIDataPut(SSI0_BASE, 0x00);
+        while(SSIBusy(SSI0_BASE))
+        {
+        }
+
+    }
+    //
+    // Wait until SSI0 is done transferring all the data in the transmit FIFO.
+    //
+    while(SSIBusy(SSI0_BASE))
+    {
+    }
+}
+
 void FLASHReadResponse(uint32_t * data, uint32_t size){
     volatile uint32_t index = 0;
     for(index = 0; index < size; index++)
@@ -132,4 +179,71 @@ void FLASHReadResponse(uint32_t * data, uint32_t size){
         //
         data[index] &= 0x00FF;
     }
+}
+
+void FLASHClockIn(uint32_t size){
+    volatile uint32_t index = 0;
+    uint32_t dummy[1];
+    for(index = 0; index < size; index++)
+    {
+        //
+        // Receive the data using the "blocking" Get function. This function
+        // will wait until there is data in the receive FIFO before returning.
+        //
+        SSIDataGet(SSI0_BASE, &dummy[1]);
+    }
+}
+
+
+void FLASHWriteEnable(){
+    uint32_t dataTx[1];
+    uint32_t dataRx[1];
+    dataTx[0] = 0x06;
+    FLASHSendCommand(dataTx,1);
+    FLASHReadResponse(dataRx,1);
+}
+
+void FLASHWriteAddress(uint32_t * address, uint32_t * data, uint32_t data_width){
+    uint32_t command[1];
+    command[0] = 0x02;
+
+    GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x0);
+    FLASHSendCommandNoCS(command,1);
+    FLASHSendCommandNoCS(address,3);
+    FLASHSendCommandNoCS(data,data_width);
+    GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x8);
+
+    FLASHClockIn(data_width+4);
+
+}
+
+void FLASHReadAddress(uint32_t * address, uint32_t * data, uint32_t data_width){
+    uint32_t command[1];
+    command[0] = 0x03;
+    GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x0);
+    FLASHSendCommandNoCS(command,1);
+    FLASHSendCommandNoCS(address,3);
+    FLASHClockOut(data_width);
+    GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x8);
+    FLASHReadResponse(data,data_width+4);
+
+}
+
+void FLASHReadId(uint32_t * id){
+    uint32_t dataTx[4] = {0x9f,0x00,0x00,0x00};
+    FLASHSendCommand(dataTx,4);
+    FLASHReadResponse(id,4);
+
+}
+
+void FLASHEraseSector(uint32_t * address){
+    uint32_t command[1];
+    command[0] = 0x20;
+
+    GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x0);
+    FLASHSendCommandNoCS(command,1);
+    FLASHSendCommandNoCS(address,3);
+    GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_3, 0x8);
+
+    FLASHClockIn(4);
 }
